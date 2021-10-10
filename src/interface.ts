@@ -18,6 +18,7 @@ export interface ExitRoomMessage extends MessageData {
 export interface TextMessage extends MessageData {
   type: 'text'
   name: string
+  time: Date
   data: {
     room: string
     text: string
@@ -25,19 +26,24 @@ export interface TextMessage extends MessageData {
 }
 
 
+
 export interface ControlData {
-    action: string
+  action: string
 }
 
 
 export interface ControlConnect extends ControlData {
-    action: 'connect'
-    id: uid
-    name: string
+  action: 'connect'
+  id: uid
+  name: string
 }
 
 export interface ControlEnterRoom extends ControlData {
-    action: 'enter_room'
-    id: uid
-    room: string
+  action: 'enter_room'
+  id: uid
+  room: string
+}
+
+export interface ControlLoginSuccess extends ControlData {
+  action: 'login_success'
 }
