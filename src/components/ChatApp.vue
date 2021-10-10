@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, reactive, ref, unref } from 'vue'
 import { NButton, NInput, useMessage } from "naive-ui"
 import { io, Socket } from "socket.io-client";
 import localForage from "localforage"
+import { AES, enc } from "crypto-js"
 import { ControlConnect, ControlData, ControlEnterRoom, ControlExitRoom, MessageData, TextMessage } from '../interface';
 import { useInputValue } from '../lib/useInputValue';
 
@@ -20,7 +21,8 @@ const my_info = reactive({
 const room = reactive({
   id: '',
   name: '',
-  host: ''
+  host: '',
+  secret: ''
 })
 
 const socket = ref<Socket | null>(null)
@@ -49,6 +51,21 @@ const PrepareSocket = () => {
         case 'text':
           {
             const msg = d as TextMessage
+            const decode = AES.decrypt(msg.data.text, room.secret).toString(enc.Utf8)
+            let realText = null
+            try {
+              realText = JSON.parse(decode)
+              if (realText.m !== '#thisistext#') {
+                realText = null
+              }
+            } catch (error) {
+
+            }
+            if (realText === null) {
+              message.error("解码失败")
+              return // 解码失败
+            }
+            msg.data.text = realText.t
             messages.value.push({
               name: msg.name,
               text: msg.data.text,
@@ -126,7 +143,7 @@ const send = () => {
     name: my_info.name,
     data: {
       room: room.id,
-      text: input_value.value
+      text: AES.encrypt(JSON.stringify({ t: input_value.value, m: '#thisistext#' }), room.secret).toString()
     }
   } as TextMessage)
   input_value.value = ""
@@ -136,6 +153,7 @@ const _host = useInputValue(room.host)
 const _id = useInputValue(my_info.id)
 const _name = useInputValue(my_info.name)
 const _room = useInputValue(room.id)
+const _secret = useInputValue(room.secret)
 onMounted(async () => {
   const cur_user = await localForage.getItem<string>('current_uid')
   if (cur_user) {
@@ -146,7 +164,6 @@ onMounted(async () => {
       _host.value = room.host
       _id.value = my_info.id
       _name.value = my_info.name
-      _room.value = room.id
     }
   }
   const cur_room = await localForage.getItem<string>('current_roomd')
@@ -158,6 +175,8 @@ onMounted(async () => {
       room.host = r.host
       _host.value = room.host
       _room.value = r.id
+      room.secret = r.secret
+      _secret.value = r.secret
     }
   }
 })
@@ -166,6 +185,7 @@ const _comfirm_id_name = async () => {
   my_info.name = _name.value
   room.id = _room.value
   room.host = _host.value
+  room.secret = _secret.value
 
   await localForage.setItem("current_uid", my_info.id)
   await user_storage.setItem(my_info.id, { ...unref(my_info) })
@@ -216,6 +236,12 @@ onUnmounted(() => {
     :value="_room.value"
     :onUpdate:value="_room.onChange"
     placeholder="ROOM"
+    :disabled="login_success"
+  />
+  <n-input
+    :value="_secret.value"
+    :onUpdate:value="_secret.onChange"
+    placeholder="SECRET"
     :disabled="login_success"
   />
   <n-button @click="_comfirm_id_name" :disabled="login_success">OK</n-button>
