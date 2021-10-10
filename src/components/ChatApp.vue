@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, reactive, ref, unref } from 'vue'
-import { NButton, NInput, useMessage } from "naive-ui"
+import { NButton, NInput, NScrollbar, useMessage } from "naive-ui"
 import { io, Socket } from "socket.io-client";
 import localForage from "localforage"
 import { AES, enc } from "crypto-js"
 import { ControlConnect, ControlData, ControlEnterRoom, ControlExitRoom, MessageData, TextMessage } from '../interface';
 import { useInputValue } from '../lib/useInputValue';
-
+import { fomateTime } from "../lib/stringHelper"
 const message = useMessage()
 
 const room_storage = localForage.createInstance({ name: 'rooms' })
@@ -130,7 +130,7 @@ const PrepareSocket = () => {
   }
 }
 
-
+const scroll = ref()
 const input_value = ref("")
 const handle_input = (newv: string) => {
   input_value.value = newv
@@ -147,6 +147,12 @@ const send = () => {
     }
   } as TextMessage)
   input_value.value = ""
+
+  // 在vue渲染完插入的数据后再移动到底部
+  setTimeout(() => {
+    scroll.value.scrollTop = scroll.value.scrollHeight;
+  }, 1)
+
 }
 
 const _host = useInputValue(room.host)
@@ -211,6 +217,8 @@ onUnmounted(() => {
     socket.value.disconnect()
   }
 })
+
+
 </script>
 
 <template>
@@ -248,7 +256,10 @@ onUnmounted(() => {
 
   <p>消息:</p>
   <p>Room: {{ room.name === '' ? '未连接' : room.name }}</p>
-  <p v-for="msg in messages">{{ `[${msg.time.toTimeString()}] [${msg.name}]: ${msg.text}` }}</p>
+  <div ref="scroll" :style="{ height: '200px', overflowY: 'scroll' }">
+    <p v-for="msg in messages">{{ `[${fomateTime(msg.time)}] [${msg.name}]: ${msg.text}` }}</p>
+  </div>
+
   <p>输入:</p>
   <n-input :value="input_value" :onUpdate:value="handle_input" />
   <n-button @click="send" :disabled="!login_success">发送</n-button>
