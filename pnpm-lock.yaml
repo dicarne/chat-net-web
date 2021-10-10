@@ -2,6 +2,7 @@ lockfileVersion: 5.3
 
 specifiers:
   '@vitejs/plugin-vue': ^1.9.3
+  localforage: ^1.10.0
   naive-ui: ^2.19.5
   socket.io-client: ^4.2.0
   typescript: ^4.4.3
@@ -10,6 +11,7 @@ specifiers:
   vue-tsc: ^0.3.0
 
 dependencies:
+  localforage: 1.10.0
   naive-ui: 2.19.5_vue@3.2.20
   socket.io-client: 4.2.0
   vue: 3.2.20
@@ -703,6 +705,10 @@ packages:
       entities: 2.2.0
     dev: true
 
+  /immediate/3.0.6:
+    resolution: {integrity: sha1-nbHb0Pr43m++D13V5Wu2BigN5ps=}
+    dev: false
+
   /is-core-module/2.7.0:
     resolution: {integrity: sha512-ByY+tjCciCr+9nLryBYcSD50EOGWt95c7tIsKTG1J2ixKKXPvF7Ej3AVd+UfDydAJom3biBGDBALaO79ktwgEQ==}
     dependencies:
@@ -761,6 +767,18 @@ packages:
       is-promise: 2.2.2
       promise: 7.3.1
     dev: true
+
+  /lie/3.1.1:
+    resolution: {integrity: sha1-mkNrLMd0bKWd56QfpGmz77dr2H4=}
+    dependencies:
+      immediate: 3.0.6
+    dev: false
+
+  /localforage/1.10.0:
+    resolution: {integrity: sha512-14/H1aX7hzBBmmh7sGPd+AOMkkIrHM3Z1PAyGgZigA1H1p5O5ANnMyWzvpAETtG68/dC4pC0ncy3+PPGzXZHPg==}
+    dependencies:
+      lie: 3.1.1
+    dev: false
 
   /lodash-es/4.17.21:
     resolution: {integrity: sha512-mKnC+QJ9pWVzv+C4/U3rRsHapFfHvQFoFB92e52xeyGMcX6/OlIl78je1u8vePzYZSkkogMPJ2yjxxsb89cxyw==}
