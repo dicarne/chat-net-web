@@ -4,7 +4,7 @@ import { NButton, NInput, NScrollbar, useMessage } from "naive-ui"
 import { io, Socket } from "socket.io-client";
 import localForage from "localforage"
 import { AES, enc } from "crypto-js"
-import { ControlConnect, ControlData, ControlEnterRoom, ControlExitRoom, MessageData, TextMessage } from '../interface';
+import { ControlAskOnlineUsers, ControlConnect, ControlData, ControlEnterRoom, ControlExitRoom, ControlRespOnlineUsers, MessageData, TextMessage } from '../interface';
 import { useInputValue } from '../lib/useInputValue';
 import { fomateTime } from "../lib/stringHelper"
 const message = useMessage()
@@ -28,10 +28,9 @@ const room = reactive({
 const socket = ref<Socket | null>(null)
 const messages = ref<{ name: string, text: string, time: Date }[]>([])
 const login_success = ref(false)
-
+const online_count = ref(0)
 const PrepareSocket = () => {
   if (socket.value) {
-
     socket.value.on("connect_error", (err) => {
       console.error(err)
     });
@@ -40,10 +39,21 @@ const PrepareSocket = () => {
       console.log(`链接成功 ${socket.value!.id}`);
     });
 
-
     socket.value.on('disconnect', function () {
       console.log('离线');
       login_success.value = false
+      setTimeout(() => {
+        socket.value?.emit('control', {
+          action: 'connect',
+          id: my_info.id,
+          name: my_info.name
+        } as ControlConnect);
+        socket.value?.emit('control', {
+          action: 'enter_room',
+          room: room.id,
+          id: my_info.id
+        } as ControlEnterRoom)
+      }, 1000);
     });
 
     socket.value.on('message', async (d: MessageData) => {
@@ -51,35 +61,38 @@ const PrepareSocket = () => {
         case 'text':
           {
             const msg = d as TextMessage
-            const decode = AES.decrypt(msg.data.text, room.secret).toString(enc.Utf8)
-            let realText = null
-            try {
-              realText = JSON.parse(decode)
-              if (realText.m !== '#thisistext#') {
-                realText = null
-              }
-            } catch (error) {
+            if (msg.data.room === room.id) {
+              const decode = AES.decrypt(msg.data.text, room.secret).toString(enc.Utf8)
+              let realText = null
+              try {
+                realText = JSON.parse(decode)
+                if (realText.m !== '#thisistext#') {
+                  realText = null
+                }
+              } catch (error) {
 
+              }
+              if (realText === null) {
+                message.error("解码失败")
+                return // 解码失败
+              }
+              msg.data.text = realText.t
+              messages.value.push({
+                name: msg.name,
+                text: msg.data.text,
+                time: new Date(msg.time)
+              })
+              await message_storage.setItem(new Date().getTime().toString(), {
+                room: msg.data.room,
+                text: msg.data.text,
+                type: 'text',
+                uid: my_info.id,
+                time: msg.time,
+                name: msg.name,
+                sender: msg.id
+              })
             }
-            if (realText === null) {
-              message.error("解码失败")
-              return // 解码失败
-            }
-            msg.data.text = realText.t
-            messages.value.push({
-              name: msg.name,
-              text: msg.data.text,
-              time: new Date(msg.time)
-            })
-            await message_storage.setItem(new Date().getTime().toString(), {
-              room: msg.data.room,
-              text: msg.data.text,
-              type: 'text',
-              uid: my_info.id,
-              time: msg.time,
-              name: msg.name,
-              sender: msg.id
-            })
+
           }
           break;
         default:
@@ -97,30 +110,42 @@ const PrepareSocket = () => {
           break;
         case 'enter_room': {
           const rr = d as ControlEnterRoom
-          if (rr.id === my_info.id) {
-            room.id = rr.room
-            room.name = rr.room_name!
-            await room_storage.setItem(rr.room + "&&" + my_info.id, { uid: my_info.id, ...unref(room) })
-            await localForage.setItem('current_roomd', rr.room)
-          } else {
-            messages.value.push({
-              name: rr.name!,
-              text: `进入房间`,
-              time: new Date()
-            })
+          if (rr.room === room.id) {
+            if (rr.id === my_info.id) {
+              room.id = rr.room
+              room.name = rr.room_name!
+              await room_storage.setItem(rr.room + "&&" + my_info.id, { uid: my_info.id, ...unref(room) })
+              await localForage.setItem('current_roomd', rr.room)
+            } else {
+              messages.value.push({
+                name: rr.name!,
+                text: `进入房间`,
+                time: new Date()
+              })
+            }
           }
+
         } break;
         case 'exit_room': {
           const rr = d as ControlExitRoom
-          if (rr.id === my_info.id) {
-            room.id = ''
-            room.name = ''
-          } else {
-            messages.value.push({
-              name: rr.name!,
-              text: `离开房间`,
-              time: new Date()
-            })
+          if (rr.room === room.id) {
+            if (rr.id === my_info.id) {
+              room.id = ''
+              room.name = ''
+            } else {
+              messages.value.push({
+                name: rr.name!,
+                text: `离开房间`,
+                time: new Date()
+              })
+            }
+          }
+
+        } break;
+        case "resp_online_users": {
+          const r = d as ControlRespOnlineUsers
+          if (room.id === r.room) {
+            online_count.value = r.count
           }
         } break;
         default:
@@ -154,6 +179,14 @@ const send = () => {
   }, 1)
 
 }
+const ask_online_count = setInterval(() => {
+  if (my_info.id != "" && room.host != "" && room.id != "" && login_success.value) {
+    socket.value?.emit("control", {
+      room: room.id,
+      action: 'ask_online_users'
+    } as ControlAskOnlineUsers)
+  }
+}, 5000);
 
 const _host = useInputValue(room.host)
 const _id = useInputValue(my_info.id)
@@ -185,6 +218,22 @@ onMounted(async () => {
       _secret.value = r.secret
     }
   }
+  if (my_info.id != "" && room.id != "" && room.host != "") {
+    socket.value = io(_host.value, {
+      transports: ['websocket']
+    })
+    PrepareSocket()
+    socket.value?.emit('control', {
+      action: 'connect',
+      id: my_info.id,
+      name: my_info.name
+    } as ControlConnect);
+    socket.value?.emit('control', {
+      action: 'enter_room',
+      room: room.id,
+      id: my_info.id
+    } as ControlEnterRoom)
+  }
 })
 const _comfirm_id_name = async () => {
   my_info.id = _id.value
@@ -208,7 +257,7 @@ const _comfirm_id_name = async () => {
   } as ControlConnect);
   socket.value.emit('control', {
     action: 'enter_room',
-    room: _room.value,
+    room: room.id,
     id: my_info.id
   } as ControlEnterRoom)
 }
@@ -216,6 +265,7 @@ onUnmounted(() => {
   if (socket.value) {
     socket.value.disconnect()
   }
+  clearInterval(ask_online_count)
 })
 
 
@@ -255,7 +305,7 @@ onUnmounted(() => {
   <n-button @click="_comfirm_id_name" :disabled="login_success">OK</n-button>
 
   <p>消息:</p>
-  <p>Room: {{ room.name === '' ? '未连接' : room.name }}</p>
+  <p>Room: {{ `${room.name === '' ? '未连接' : room.name} 在线：${online_count}` }}</p>
   <div ref="scroll" :style="{ height: '200px', overflowY: 'scroll' }">
     <p v-for="msg in messages">{{ `[${fomateTime(msg.time)}] [${msg.name}]: ${msg.text}` }}</p>
   </div>
